@@ -4,47 +4,20 @@ import {
     updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
-// Import Web3Modal CDN bundles
-import { createWeb3Modal, defaultConfig } from 'https://cdn.jsdelivr.net/npm/@web3modal/ethers@5.0.11/dist/bundle.js';
+// Web3Modal and Provider options
+const providerOptions = {
+  walletconnect: {
+    package: window.WalletConnectProvider ? window.WalletConnectProvider.default : window.WalletConnectProvider, // required
+    options: {
+      infuraId: "INFURA_ID" // optional - users will need to replace this or we can leave as demo
+    }
+  }
+};
 
-// Define project ID for WalletConnect (you usually need a real one for production, we will use a demo or free one here, but user hasn't provided one so we'll leave a placeholder/demo)
-const projectId = 'b45c26cefb22cdbdff9a2b5e28a50ed1'; // Example project ID for testing purposes, user should replace this for production.
-
-// 2. Set chains
-const mainnet = {
-  chainId: 1,
-  name: 'Ethereum',
-  currency: 'ETH',
-  explorerUrl: 'https://etherscan.io',
-  rpcUrl: 'https://cloudflare-eth.com'
-}
-
-// 3. Create your application's metadata object
-const metadata = {
-  name: 'Old Ham Farms',
-  description: 'Old Ham Farms Community Hub',
-  url: 'https://oldham.farm', // origin must match your domain & subdomain
-  icons: ['https://avatars.githubusercontent.com/u/37784886']
-}
-
-// 4. Create Ethers config
-const ethersConfig = defaultConfig({
-  /*Required*/
-  metadata,
-  /*Optional*/
-  enableEIP6963: true, // true by default
-  enableInjected: true, // true by default
-  enableCoinbase: true, // true by default
-  rpcUrl: '...', // used for the Coinbase SDK
-  defaultChainId: 1 // used for the Coinbase SDK
-})
-
-// 5. Create a Web3Modal instance
-const modal = createWeb3Modal({
-  ethersConfig,
-  chains: [mainnet],
-  projectId,
-  enableAnalytics: true // Optional - defaults to your Cloud configuration
+const web3Modal = new window.Web3Modal.default({
+  cacheProvider: false, // optional
+  providerOptions, // required
+  theme: "dark"
 });
 
 const connectWalletBtn = document.getElementById('connect-wallet-btn');
@@ -71,7 +44,7 @@ window.addEventListener('userLoaded', (e) => {
 window.addEventListener('userLoggedOut', () => {
     currentUserUid = null;
     resetWalletUI();
-    // Optional: disconnect web3modal if needed
+    web3Modal.clearCachedProvider();
 });
 
 function resetWalletUI() {
@@ -81,39 +54,59 @@ function resetWalletUI() {
     connectWalletBtn.textContent = 'CONNECT WALLET';
 }
 
-// Handle Connect Button click
-connectWalletBtn.addEventListener('click', async () => {
+async function connectWallet() {
     if (!currentUserUid) {
         alert("Please ensure you are fully logged in first.");
         return;
     }
 
-    // Open Web3Modal
-    modal.open();
-});
+    try {
+        const provider = await web3Modal.connect();
 
-// Listen for Web3Modal connection events to save to Firestore
-modal.subscribeProvider(async (state) => {
-  if (state.isConnected && state.address && currentUserUid) {
-      const address = state.address;
+        // Wrap the provider with ethers
+        const ethersProvider = new window.ethers.providers.Web3Provider(provider);
+        const signer = ethersProvider.getSigner();
+        const address = await signer.getAddress();
 
-      // Update UI
-      walletStatusDisplay.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-      walletStatusDisplay.classList.add('text-green-400');
-      walletStatusDisplay.classList.remove('text-gray-400');
-      connectWalletBtn.textContent = 'CHANGE WALLET';
+        // Update UI
+        walletStatusDisplay.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        walletStatusDisplay.classList.add('text-green-400');
+        walletStatusDisplay.classList.remove('text-gray-400');
+        connectWalletBtn.textContent = 'CHANGE WALLET';
 
-      // Save to Firestore
-      try {
-          const userDocRef = doc(db, "users", currentUserUid);
-          await updateDoc(userDocRef, {
-              walletAddress: address
-          });
-          console.log("Wallet connected and saved to Firestore:", address);
-      } catch (error) {
-          console.error("Error saving wallet to Firestore:", error);
-      }
-  } else if (!state.isConnected) {
-      resetWalletUI();
-  }
-});
+        // Save to Firestore
+        const userDocRef = doc(db, "users", currentUserUid);
+        await updateDoc(userDocRef, {
+            walletAddress: address
+        });
+
+        console.log("Wallet connected and saved to Firestore:", address);
+
+        // Subscribe to accounts change
+        provider.on("accountsChanged", async (accounts) => {
+          if (accounts.length > 0) {
+              const newAddress = accounts[0];
+              walletStatusDisplay.textContent = `Connected: ${newAddress.substring(0, 6)}...${newAddress.substring(newAddress.length - 4)}`;
+              await updateDoc(userDocRef, { walletAddress: newAddress });
+          } else {
+              resetWalletUI();
+          }
+        });
+
+        // Subscribe to chainId change
+        provider.on("chainChanged", (chainId) => {
+          console.log("Chain changed:", chainId);
+        });
+
+        // Subscribe to provider disconnection
+        provider.on("disconnect", (error) => {
+          console.log("Wallet disconnected:", error);
+          resetWalletUI();
+        });
+
+    } catch (e) {
+        console.error("Could not get a wallet connection", e);
+    }
+}
+
+connectWalletBtn.addEventListener('click', connectWallet);
