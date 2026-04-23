@@ -7,14 +7,16 @@ import {
 // Web3Modal and Provider options
 const providerOptions = {
   walletconnect: {
-    package: window.WalletConnectProvider ? window.WalletConnectProvider.default : window.WalletConnectProvider, // required
+    package: window.WalletConnectProvider ? window.WalletConnectProvider.default : null, // required
     options: {
-      infuraId: "INFURA_ID" // optional - users will need to replace this or we can leave as demo
+      infuraId: "27e484dcd9e3efcfd25a83a78777cdf1" // generic placeholder to prevent silent failures
     }
   }
 };
 
-const web3Modal = new window.Web3Modal.default({
+const Web3Modal = window.Web3Modal.default;
+
+const web3Modal = new Web3Modal({
   cacheProvider: false, // optional
   providerOptions, // required
   theme: "dark"
