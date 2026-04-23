@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+body {
+    background: linear-gradient(135deg, #020024 0%, #090979 35%, #00d4ff 100%);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    color: #e2e8f0;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+}
+
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+h1, h2, h3, h4, h5, h6, .font-orbitron {
+    font-family: 'Orbitron', sans-serif;
+}
+
+/* Glassmorphism utility */
+.glass {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Glowing Neon Accents */
+.neon-text-blue {
+    color: #00d4ff;
+    text-shadow: 0 0 5px #00d4ff, 0 0 10px #00d4ff;
+}
+
+.neon-text-purple {
+    color: #b14bf4;
+    text-shadow: 0 0 5px #b14bf4, 0 0 10px #b14bf4;
+}
+
+.neon-btn-blue {
+    background: transparent;
+    border: 2px solid #00d4ff;
+    color: #00d4ff;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 5px #00d4ff inset, 0 0 10px #00d4ff;
+}
+
+.neon-btn-blue:hover {
+    background: #00d4ff;
+    color: #020024;
+    box-shadow: 0 0 10px #00d4ff inset, 0 0 20px #00d4ff;
+}
+
+.neon-btn-purple {
+    background: transparent;
+    border: 2px solid #b14bf4;
+    color: #b14bf4;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 5px #b14bf4 inset, 0 0 10px #b14bf4;
+}
+
+.neon-btn-purple:hover {
+    background: #b14bf4;
+    color: #020024;
+    box-shadow: 0 0 10px #b14bf4 inset, 0 0 20px #b14bf4;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #020024;
+}
+::-webkit-scrollbar-thumb {
+    background: #b14bf4;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #00d4ff;
+}
