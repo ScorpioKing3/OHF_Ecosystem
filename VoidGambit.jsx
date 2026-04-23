@@ -1,0 +1,648 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Shield, Zap, Skull, Cpu, Users, Play, Trophy, ChevronRight, LayoutGrid, CircleDot, Crosshair } from 'lucide-react';
+
+// --- GAME DATABASE & CONSTANTS ---
+const PIECE_TYPES = {
+  pawn: { id: 'pawn', symbol: '♙', name: 'Scout', value: 1, cost: 20 },
+  knight: { id: 'knight', symbol: '♘', name: 'Charger', value: 3, cost: 50 },
+  bishop: { id: 'bishop', symbol: '♝', name: 'Sniper', value: 3, cost: 50 },
+  rook: { id: 'rook', symbol: '♜', name: 'Bulwark', value: 5, cost: 100 },
+  queen: { id: 'queen', symbol: '♛', name: 'Dreadnought', value: 9, cost: 250 },
+  king: { id: 'king', symbol: '♔', name: 'Captain', value: 100, cost: 0 } // Cannot be bought
+};
+
+const DEFAULT_DECK = ['pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'knight', 'bishop'];
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// --- CHESS LOGIC ENGINE ---
+const getValidMoves = (piece, board) => {
+  if (!piece) return [];
+  const moves = [];
+  const { type, color, x, y } = piece;
+  const dir = color === 'white' ? -1 : 1; // White moves up (-y), Black moves down (+y)
+
+  const isEnemy = (tx, ty) => {
+    const p = board.find(b => b.x === tx && b.y === ty);
+    return p && p.color !== color;
+  };
+  const isEmpty = (tx, ty) => !board.find(b => b.x === tx && b.y === ty);
+  const isValidPos = (tx, ty) => tx >= 0 && tx < 8 && ty >= 0 && ty < 8;
+
+  const addIfValid = (tx, ty) => {
+    if (isValidPos(tx, ty)) {
+      if (isEmpty(tx, ty) || isEnemy(tx, ty)) moves.push({ x: tx, y: ty });
+    }
+  };
+
+  const slide = (dx, dy) => {
+    let tx = x + dx; let ty = y + dy;
+    while (isValidPos(tx, ty)) {
+      if (isEmpty(tx, ty)) {
+        moves.push({ x: tx, y: ty });
+      } else {
+        if (isEnemy(tx, ty)) moves.push({ x: tx, y: ty });
+        break;
+      }
+      tx += dx; ty += dy;
+    }
+  };
+
+  if (type === 'pawn') {
+    // Standard move
+    if (isEmpty(x, y + dir)) {
+      moves.push({ x, y: y + dir });
+      // Initial double move (simplified: allowed if on starting rank)
+      if ((color === 'white' && y === 6) || (color === 'black' && y === 1)) {
+        if (isEmpty(x, y + dir * 2)) moves.push({ x, y: y + dir * 2 });
+      }
+    }
+    // Captures
+    if (isValidPos(x - 1, y + dir) && isEnemy(x - 1, y + dir)) moves.push({ x: x - 1, y: y + dir });
+    if (isValidPos(x + 1, y + dir) && isEnemy(x + 1, y + dir)) moves.push({ x: x + 1, y: y + dir });
+  } 
+  else if (type === 'knight') {
+    const jumps = [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]];
+    jumps.forEach(([dx, dy]) => addIfValid(x + dx, y + dy));
+  }
+  else if (type === 'bishop') {
+    slide(1, 1); slide(1, -1); slide(-1, 1); slide(-1, -1);
+  }
+  else if (type === 'rook') {
+    slide(1, 0); slide(-1, 0); slide(0, 1); slide(0, -1);
+  }
+  else if (type === 'queen') {
+    slide(1, 1); slide(1, -1); slide(-1, 1); slide(-1, -1);
+    slide(1, 0); slide(-1, 0); slide(0, 1); slide(0, -1);
+  }
+  else if (type === 'king') {
+    const steps = [[1, 1], [1, 0], [1, -1], [0, 1], [0, -1], [-1, 1], [-1, 0], [-1, -1]];
+    steps.forEach(([dx, dy]) => addIfValid(x + dx, y + dy));
+  }
+
+  return moves;
+};
+
+
+// --- MAIN APP COMPONENT ---
+export default function VoidGambit() {
+  // Global Progression
+  const [radh, setRadh] = useState(150);
+  const [collection, setCollection] = useState([...DEFAULT_DECK]);
+  
+  // Game Modes
+  const [gameState, setGameState] = useState('menu'); // menu, armory, playing, gameover
+  const [mode, setMode] = useState('ai_medium'); // pvp, ai_easy, ai_medium, ai_hard
+  const [winner, setWinner] = useState(null);
+  
+  // Match State
+  const [board, setBoard] = useState([]);
+  const [turn, setTurn] = useState('white');
+  const [ap, setAp] = useState(2);
+  const [players, setPlayers] = useState({
+    white: { deck: [], hand: [], discard: [] },
+    black: { deck: [], hand: [], discard: [] }
+  });
+  
+  // UI Interaction State
+  const [selectedPiece, setSelectedPiece] = useState(null);
+  const [selectedCommand, setSelectedCommand] = useState(null);
+  const [errorToast, setErrorToast] = useState(null);
+
+  // --- DECK MANAGEMENT ---
+  const drawCards = (playerObj, num) => {
+    let newHand = [...playerObj.hand];
+    let newDeck = [...playerObj.deck];
+    let newDiscard = [...playerObj.discard];
+
+    for (let i = 0; i < num; i++) {
+      if (newDeck.length === 0) {
+        if (newDiscard.length === 0) break;
+        newDeck = [...newDiscard].sort(() => Math.random() - 0.5);
+        newDiscard = [];
+      }
+      newHand.push(newDeck.pop());
+    }
+    return { deck: newDeck, discard: newDiscard, hand: newHand };
+  };
+
+  const showToast = (msg) => {
+    setErrorToast(msg);
+    setTimeout(() => setErrorToast(null), 2000);
+  };
+
+  // --- INITIALIZATION ---
+  const startMatch = (selectedMode) => {
+    setMode(selectedMode);
+    
+    // Create Decks
+    const wDeck = [...collection].sort(() => Math.random() - 0.5);
+    
+    // AI Deck scales with difficulty
+    let bDeckTemplate = [...DEFAULT_DECK];
+    if (selectedMode === 'ai_medium') bDeckTemplate.push('rook', 'bishop');
+    if (selectedMode === 'ai_hard') bDeckTemplate.push('queen', 'rook', 'knight');
+    const bDeck = bDeckTemplate.sort(() => Math.random() - 0.5);
+
+    let pWhite = { deck: wDeck, hand: [], discard: [] };
+    let pBlack = { deck: bDeck, hand: [], discard: [] };
+
+    pWhite = drawCards(pWhite, 5);
+    pBlack = drawCards(pBlack, 5);
+    
+    setPlayers({ white: pWhite, black: pBlack });
+
+    // Initial Board
+    setBoard([
+      { id: 'wk', type: 'king', color: 'white', x: 4, y: 7 },
+      { id: 'w1', type: 'pawn', color: 'white', x: 3, y: 6 },
+      { id: 'w2', type: 'pawn', color: 'white', x: 4, y: 6 },
+      { id: 'w3', type: 'pawn', color: 'white', x: 5, y: 6 },
+      
+      { id: 'bk', type: 'king', color: 'black', x: 4, y: 0 },
+      { id: 'b1', type: 'pawn', color: 'black', x: 3, y: 1 },
+      { id: 'b2', type: 'pawn', color: 'black', x: 4, y: 1 },
+      { id: 'b3', type: 'pawn', color: 'black', x: 5, y: 1 },
+    ]);
+
+    setTurn('white');
+    setAp(2);
+    setWinner(null);
+    setSelectedPiece(null);
+    setSelectedCommand(null);
+    setGameState('playing');
+  };
+
+  // --- CORE ACTIONS ---
+  const executeMove = (pieceId, targetX, targetY, commandIndex = -1) => {
+    setBoard(prevBoard => {
+      let newBoard = [...prevBoard];
+      
+      // Capture logic
+      const capturedIndex = newBoard.findIndex(p => p.x === targetX && p.y === targetY);
+      if (capturedIndex !== -1) {
+        if (newBoard[capturedIndex].type === 'king') {
+          setWinner(turn);
+          setGameState('gameover');
+          if (turn === 'white') setRadh(r => r + (mode === 'ai_hard' ? 100 : 50));
+        } else {
+          if (turn === 'white') setRadh(r => r + PIECE_TYPES[newBoard[capturedIndex].type].value * 2);
+        }
+        newBoard.splice(capturedIndex, 1);
+      }
+
+      // Move logic
+      const pIndex = newBoard.findIndex(p => p.id === pieceId);
+      newBoard[pIndex] = { ...newBoard[pIndex], x: targetX, y: targetY };
+      return newBoard;
+    });
+
+    consumeAction(commandIndex);
+  };
+
+  const executeDeploy = (type, targetX, targetY, commandIndex) => {
+    setBoard(prev => [...prev, { id: generateId(), type, color: turn, x: targetX, y: targetY }]);
+    consumeAction(commandIndex);
+  };
+
+  const consumeAction = (commandIndex) => {
+    let currentPlayerState = { ...players[turn] };
+    
+    // Spend Command Card if applicable (King moves are free from cards, but cost AP)
+    if (commandIndex !== -1) {
+      const spentCard = currentPlayerState.hand.splice(commandIndex, 1)[0];
+      currentPlayerState.discard.push(spentCard);
+    }
+
+    setPlayers(prev => ({ ...prev, [turn]: currentPlayerState }));
+    
+    // AP Logic
+    if (ap <= 1) {
+      endTurn(currentPlayerState);
+    } else {
+      setAp(ap - 1);
+      setSelectedPiece(null);
+      setSelectedCommand(null);
+    }
+  };
+
+  const endTurn = (finalPlayerState = null) => {
+    // Replenish Hand
+    let pState = finalPlayerState || { ...players[turn] };
+    const cardsNeeded = Math.max(0, 5 - pState.hand.length);
+    if (cardsNeeded > 0) pState = drawCards(pState, cardsNeeded);
+    
+    const nextTurn = turn === 'white' ? 'black' : 'white';
+    
+    setPlayers(prev => ({ ...prev, [turn]: pState }));
+    setTurn(nextTurn);
+    setAp(2);
+    setSelectedPiece(null);
+    setSelectedCommand(null);
+  };
+
+  // --- PLAYER INTERACTION LOGIC ---
+  const handleSquareClick = (x, y) => {
+    if (turn !== 'white' && mode !== 'pvp') return; // Block input during AI turn
+    
+    const clickedPiece = board.find(p => p.x === x && p.y === y);
+
+    // 1. Trying to Deploy a piece
+    if (selectedCommand !== null) {
+      const type = players[turn].hand[selectedCommand];
+      // Back 2 ranks check
+      const validRank = turn === 'white' ? y >= 6 : y <= 1;
+      
+      if (!clickedPiece && validRank) {
+        executeDeploy(type, x, y, selectedCommand);
+      } else {
+        showToast("Invalid Deployment Zone");
+        setSelectedCommand(null);
+      }
+      return;
+    }
+
+    // 2. Select Own Piece
+    if (clickedPiece && clickedPiece.color === turn) {
+      setSelectedPiece(clickedPiece);
+      return;
+    }
+
+    // 3. Move Selected Piece
+    if (selectedPiece) {
+      const validMoves = getValidMoves(selectedPiece, board);
+      if (validMoves.some(m => m.x === x && m.y === y)) {
+        
+        // Check if we have the command card to move it
+        if (selectedPiece.type === 'king') {
+          executeMove(selectedPiece.id, x, y, -1); // King moves don't consume cards
+        } else {
+          const hand = players[turn].hand;
+          const cmdIndex = hand.indexOf(selectedPiece.type);
+          if (cmdIndex !== -1) {
+             executeMove(selectedPiece.id, x, y, cmdIndex);
+          } else {
+             showToast(`Requires ${PIECE_TYPES[selectedPiece.type].name} Command`);
+          }
+        }
+      } else {
+        setSelectedPiece(null);
+      }
+    }
+  };
+
+
+  // --- AI LOGIC ---
+  useEffect(() => {
+    if (gameState !== 'playing' || turn === 'white' || mode === 'pvp') return;
+
+    const runAITurn = async () => {
+      // Small delay for UX
+      await new Promise(r => setTimeout(r, 600));
+
+      if (ap <= 0 || gameState !== 'playing') return;
+
+      const aiState = players.black;
+      const availableCommands = [...aiState.hand];
+      let bestAction = null;
+      let bestScore = -9999;
+
+      // Helper to score a board state
+      const scoreBoard = (b) => {
+        let score = 0;
+        b.forEach(p => {
+          const val = PIECE_TYPES[p.type].value;
+          // Center control bonus
+          let centerBonus = 0;
+          if (p.x >= 2 && p.x <= 5 && p.y >= 2 && p.y <= 5) centerBonus = 0.5;
+          if (p.color === 'black') score += val + centerBonus;
+          else score -= val;
+        });
+        return score;
+      };
+
+      // 1. Evaluate Moves
+      board.filter(p => p.color === 'black').forEach(piece => {
+        const canMove = piece.type === 'king' || availableCommands.includes(piece.type);
+        if (!canMove) return;
+
+        const moves = getValidMoves(piece, board);
+        moves.forEach(m => {
+          // Simulate move
+          let simBoard = board.filter(b => !(b.x === m.x && b.y === m.y)); // Remove captured
+          const pIndex = simBoard.findIndex(b => b.id === piece.id);
+          simBoard[pIndex] = { ...simBoard[pIndex], x: m.x, y: m.y };
+          
+          let score = scoreBoard(simBoard);
+          
+          // Difficulty modifiers
+          if (mode === 'ai_easy') score = Math.random() * 10; // Randomize
+          if (mode === 'ai_medium') score += Math.random() * 2; // Slight noise
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestAction = { type: 'move', pieceId: piece.id, x: m.x, y: m.y, cmdIndex: piece.type === 'king' ? -1 : availableCommands.indexOf(piece.type) };
+          }
+        });
+      });
+
+      // 2. Evaluate Deployments (Only if we have room and cards)
+      if (board.filter(p => p.color === 'black').length < 16) {
+        availableCommands.forEach((cmd, idx) => {
+           // Try deploying on top two rows
+           for(let dy=0; dy<=1; dy++) {
+             for(let dx=0; dx<8; dx++) {
+               if (!board.find(b => b.x === dx && b.y === dy)) {
+                 // Simulate deploy
+                 let simBoard = [...board, { type: cmd, color: 'black', x: dx, y: dy }];
+                 let score = scoreBoard(simBoard) + 0.1; // Slight bonus for having more pieces
+                 
+                 if (mode === 'ai_easy') score = Math.random() * 10;
+                 
+                 if (score > bestScore) {
+                    bestScore = score;
+                    bestAction = { type: 'deploy', pieceType: cmd, x: dx, y: dy, cmdIndex: idx };
+                 }
+               }
+             }
+           }
+        });
+      }
+
+      // Execute Best Action
+      if (bestAction) {
+        if (bestAction.type === 'move') executeMove(bestAction.pieceId, bestAction.x, bestAction.y, bestAction.cmdIndex);
+        if (bestAction.type === 'deploy') executeDeploy(bestAction.pieceType, bestAction.x, bestAction.y, bestAction.cmdIndex);
+      } else {
+        // AI has no valid actions, end turn
+        endTurn();
+      }
+    };
+
+    runAITurn();
+  }, [turn, ap, board, gameState]); // Trigger on turn/ap changes
+
+
+  // --- RENDERERS ---
+
+  if (gameState === 'menu') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col items-center justify-center p-4 font-sans selection:bg-cyan-500/30">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-500"></div>
+          
+          <div className="flex justify-center mb-6">
+            <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-700 shadow-inner">
+               <span className="text-5xl text-cyan-400 drop-shadow-md">♔</span>
+            </div>
+          </div>
+          
+          <h1 className="text-4xl font-black mb-1 tracking-tight text-white">VOID GAMBIT</h1>
+          <p className="text-cyan-500/80 text-xs font-bold tracking-[0.2em] uppercase mb-8">Tactical Command Simulation</p>
+          
+          <div className="space-y-3 mb-8">
+            <button onClick={() => startMatch('ai_easy')} className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/50 rounded-xl font-bold flex items-center justify-between px-6 transition-all group">
+              <span className="flex items-center gap-3"><Cpu size={18} className="text-slate-400 group-hover:text-cyan-400 transition-colors"/> AI: Scout (Easy)</span>
+              <ChevronRight size={16} className="text-slate-600 group-hover:text-cyan-400" />
+            </button>
+            <button onClick={() => startMatch('ai_medium')} className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/50 rounded-xl font-bold flex items-center justify-between px-6 transition-all group">
+              <span className="flex items-center gap-3"><Cpu size={18} className="text-slate-400 group-hover:text-cyan-400 transition-colors"/> AI: Commander (Med)</span>
+              <ChevronRight size={16} className="text-slate-600 group-hover:text-cyan-400" />
+            </button>
+            <button onClick={() => startMatch('ai_hard')} className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/50 rounded-xl font-bold flex items-center justify-between px-6 transition-all group">
+              <span className="flex items-center gap-3"><Skull size={18} className="text-red-400 group-hover:text-red-300 transition-colors"/> AI: Syndicate (Hard)</span>
+              <ChevronRight size={16} className="text-slate-600 group-hover:text-red-400" />
+            </button>
+            <button onClick={() => startMatch('pvp')} className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 rounded-xl font-bold flex items-center justify-between px-6 transition-all group">
+              <span className="flex items-center gap-3"><Users size={18} className="text-purple-400 group-hover:text-purple-300 transition-colors"/> Hotseat PvP</span>
+              <ChevronRight size={16} className="text-slate-600 group-hover:text-purple-400" />
+            </button>
+          </div>
+
+          <button onClick={() => setGameState('armory')} className="w-full py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/20 active:scale-95 transition-all flex justify-center items-center gap-2">
+            <LayoutGrid size={18}/> Access Armory
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'armory') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col items-center p-4 font-sans">
+        <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-2xl shadow-2xl relative overflow-hidden">
+           <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-800">
+             <div>
+               <h2 className="text-2xl font-black text-white">THE ARMORY</h2>
+               <p className="text-xs text-slate-400 uppercase tracking-widest">Deck Modification</p>
+             </div>
+             <div className="flex items-center gap-2 bg-slate-950 px-4 py-2 rounded-full border border-slate-800">
+               <span className="text-green-400 font-bold">$RADH</span>
+               <span className="text-xl font-black">{radh}</span>
+             </div>
+           </div>
+
+           <div className="mb-8">
+             <h3 className="text-sm font-bold text-cyan-500 mb-4 tracking-wider uppercase">Available Requisitions</h3>
+             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+               {['knight', 'bishop', 'rook', 'queen'].map(type => {
+                 const piece = PIECE_TYPES[type];
+                 return (
+                   <button 
+                     key={type}
+                     disabled={radh < piece.cost}
+                     onClick={() => { setRadh(r => r - piece.cost); setCollection(c => [...c, type]); }}
+                     className={`p-4 rounded-xl border flex flex-col items-center justify-center transition-all ${radh >= piece.cost ? 'bg-slate-800 border-slate-700 hover:border-cyan-500 hover:bg-slate-750 cursor-pointer active:scale-95' : 'bg-slate-900 border-slate-800 opacity-50 cursor-not-allowed'}`}
+                   >
+                     <span className="text-4xl text-slate-300 mb-2">{piece.symbol}</span>
+                     <span className="text-sm font-bold text-white">{piece.name}</span>
+                     <span className="text-xs text-green-400 mt-1">{piece.cost} RADH</span>
+                   </button>
+                 )
+               })}
+             </div>
+           </div>
+
+           <div>
+             <h3 className="text-sm font-bold text-cyan-500 mb-4 tracking-wider uppercase">Current Command Deck ({collection.length})</h3>
+             <div className="flex flex-wrap gap-2">
+               {collection.map((c, i) => (
+                 <div key={i} className="w-12 h-14 bg-slate-800 border border-slate-700 rounded-md flex items-center justify-center text-2xl text-slate-400">
+                   {PIECE_TYPES[c].symbol}
+                 </div>
+               ))}
+             </div>
+           </div>
+
+           <button onClick={() => setGameState('menu')} className="mt-8 w-full py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-bold transition-all">
+             Return to Hub
+           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'gameover') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 font-sans">
+        <div className="text-7xl mb-6">{winner === 'white' ? '🏆' : '💀'}</div>
+        <h2 className={`text-4xl font-black mb-2 tracking-tight ${winner === 'white' ? 'text-cyan-400' : 'text-red-500'}`}>
+          {winner === 'white' ? 'VICTORY' : 'DEFEAT'}
+        </h2>
+        <p className="text-slate-400 mb-8 uppercase tracking-widest text-sm">
+          {winner === 'white' ? 'Syndicate Commander Eliminated' : 'Captain Truffles Captured'}
+        </p>
+        <button onClick={() => setGameState('menu')} className="px-10 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-bold transition-all shadow-lg">
+          Return to Hub
+        </button>
+      </div>
+    );
+  }
+
+  // --- PLAYING STATE RENDER VARIABLES ---
+  const activePlayerState = players[turn];
+  let validMoveSquares = [];
+  if (selectedPiece && selectedPiece.color === turn) {
+     validMoveSquares = getValidMoves(selectedPiece, board);
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col font-sans relative">
+      
+      {/* ERROR TOAST */}
+      {errorToast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-red-500/90 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg shadow-red-900/50 animate-bounce">
+          {errorToast}
+        </div>
+      )}
+
+      {/* TOP HUD */}
+      <div className="bg-slate-900 border-b border-slate-800 p-3 sm:p-4 flex justify-between items-center shadow-md z-10">
+        <div className="flex flex-col">
+           <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">Enemy Forces</span>
+           <div className="flex gap-1 text-red-400 text-lg">
+             {/* Show captured white pieces (Enemy Trophies) */}
+             {['pawn', 'knight', 'bishop', 'rook', 'queen'].map(type => {
+               const startCount = type==='pawn'?4:(type==='knight'||type==='bishop')?1:0; // rough estimate
+               const currentCount = board.filter(p => p.color === 'white' && p.type === type).length;
+               // Not a perfect graveyard, just aesthetic flavor for simplicity
+               return null; 
+             })}
+             <Skull size={18} className="mt-0.5 opacity-50"/>
+           </div>
+        </div>
+        
+        <div className="flex gap-2">
+          {[...Array(2)].map((_, i) => (
+             <div key={i} className={`w-3 h-3 rounded-full ${i < ap ? (turn==='white'?'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]':'bg-red-500') : 'bg-slate-800'} transition-all duration-300`} />
+          ))}
+        </div>
+      </div>
+
+      {/* BATTLEFIELD */}
+      <div className="flex-1 flex items-center justify-center p-2 sm:p-6 relative">
+        <div className="w-full max-w-2xl aspect-square grid grid-cols-8 border-4 border-slate-800 rounded-sm shadow-2xl shadow-cyan-900/10">
+          {[...Array(64)].map((_, i) => {
+            const x = i % 8;
+            const y = Math.floor(i / 8);
+            const isLightSquare = (x + y) % 2 === 0;
+            
+            const piece = board.find(p => p.x === x && p.y === y);
+            const isSelected = selectedPiece?.id === piece?.id;
+            const isValidMove = validMoveSquares.some(m => m.x === x && m.y === y);
+            
+            // Deploy highlights
+            const isDeployZone = selectedCommand !== null && (turn === 'white' ? y >= 6 : y <= 1);
+            const canDeployHere = isDeployZone && !piece;
+
+            return (
+              <div 
+                key={i} 
+                onClick={() => handleSquareClick(x, y)}
+                className={`
+                  relative flex items-center justify-center text-3xl sm:text-4xl md:text-5xl transition-colors
+                  ${isLightSquare ? 'bg-slate-300/90' : 'bg-slate-600/90'}
+                  ${isSelected ? 'bg-cyan-400/50' : ''}
+                  ${isValidMove && piece ? 'bg-red-500/60 cursor-pointer shadow-inner ring-inset ring-2 ring-red-500' : ''}
+                  ${isValidMove && !piece ? 'cursor-pointer after:content-[""] after:w-3 after:h-3 after:bg-cyan-500/50 after:rounded-full hover:after:bg-cyan-400' : ''}
+                  ${canDeployHere ? 'bg-green-500/30 cursor-pointer ring-inset ring-2 ring-green-400/50 hover:bg-green-500/50' : ''}
+                `}
+              >
+                {piece && (
+                  <span className={`
+                    relative z-10 transition-transform select-none
+                    ${piece.color === 'white' ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-slate-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.3)] font-bold'}
+                    ${isSelected ? 'scale-110' : ''}
+                  `}>
+                    {PIECE_TYPES[piece.type].symbol}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* BOTTOM COMMAND CONSOLE */}
+      <div className={`p-4 border-t ${turn === 'white' ? 'border-cyan-900/50 bg-slate-900/90' : 'border-red-900/50 bg-slate-900/90'} backdrop-blur-md pb-8 transition-colors duration-500`}>
+        
+        {turn === 'black' && mode !== 'pvp' ? (
+           <div className="h-28 flex flex-col items-center justify-center text-slate-500 animate-pulse">
+             <Cpu size={32} className="mb-2 text-red-500/50" />
+             <p className="text-sm font-bold uppercase tracking-widest">Syndicate Calculating...</p>
+           </div>
+        ) : (
+          <>
+            <div className="flex justify-between items-end mb-3 px-1">
+              <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Command Queue</div>
+              <div className="text-[10px] text-slate-600 font-bold uppercase">Reserves: {activePlayerState.deck.length}</div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x pb-2">
+              {activePlayerState.hand.map((cardType, idx) => {
+                const pieceData = PIECE_TYPES[cardType];
+                const isSelected = selectedCommand === idx;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => { setSelectedCommand(isSelected ? null : idx); setSelectedPiece(null); }}
+                    className={`
+                      snap-center shrink-0 w-20 h-24 sm:w-24 sm:h-28 rounded-xl flex flex-col items-center justify-center relative transition-all border-2
+                      ${isSelected ? 'bg-cyan-900 border-cyan-400 -translate-y-2 shadow-[0_8px_16px_rgba(34,211,238,0.2)]' : 'bg-slate-800 border-slate-700 hover:border-slate-500'}
+                    `}
+                  >
+                    <span className="text-3xl text-slate-300 mb-1">{pieceData.symbol}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{pieceData.name}</span>
+                    
+                    {/* Tiny visual indicator that it's a card */}
+                    <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-slate-600"></div>
+                  </button>
+                )
+              })}
+              
+              {activePlayerState.hand.length === 0 && (
+                <div className="w-full h-24 flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl text-slate-600 text-xs uppercase font-bold tracking-widest">
+                  Queue Empty
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 flex gap-2">
+               <button 
+                 onClick={() => endTurn()}
+                 className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-colors flex items-center justify-center gap-2"
+               >
+                 End Turn <ChevronRight size={14}/>
+               </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
+    </div>
+  );
+}
