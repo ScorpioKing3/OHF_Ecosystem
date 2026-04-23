@@ -10,9 +10,9 @@
     <link rel="stylesheet" href="style.css">
 
     <!-- Ethers.js for Web3Modal logic -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
-    <script type="text/javascript" src="https://unpkg.com/web3modal"></script>
-    <script type="text/javascript" src="https://unpkg.com/@walletconnect/web3-provider"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
+    <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
 </head>
 <body class="m-0 p-0 overflow-x-hidden">
 
@@ -33,7 +33,7 @@
             <h2 class="text-3xl font-orbitron font-bold mb-8 neon-text-purple text-center">ACCESS TERMINAL</h2>
 
             <div class="w-full mb-6">
-                <input type="email" id="email" placeholder="Email Address" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff] mb-4">
+                <input type="text" id="username" placeholder="Username" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff] mb-4">
                 <input type="password" id="password" placeholder="Password" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff]">
             </div>
 
@@ -45,6 +45,14 @@
                 </button>
                 <button id="signup-btn" class="w-full py-3 rounded-md font-orbitron font-bold text-lg neon-btn-purple">
                     SIGN UP
+                </button>
+                <div class="flex items-center justify-center space-x-2 my-2">
+                    <div class="h-px bg-gray-600 w-1/4"></div>
+                    <span class="text-gray-400 text-sm font-orbitron">OR</span>
+                    <div class="h-px bg-gray-600 w-1/4"></div>
+                </div>
+                <button id="guest-btn" class="w-full py-3 rounded-md font-orbitron font-bold text-lg border-2 border-gray-500 text-gray-300 transition-all hover:border-white hover:text-white hover:shadow-[0_0_10px_white]">
+                    PLAY AS GUEST
                 </button>
             </div>
         </div>
