@@ -20,6 +20,7 @@ const usernameContainer = document.getElementById('username-container');
 const usernameInput = document.getElementById('username');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
+const authForm = document.getElementById('auth-form');
 const actionBtn = document.getElementById('action-btn');
 const toggleAuthModeBtn = document.getElementById('toggle-auth-mode');
 const guestBtn = document.getElementById('guest-btn');
@@ -66,8 +67,9 @@ function clearError() {
     authError.classList.add('hidden');
 }
 
-// Action Button (Login or Sign Up)
-actionBtn.addEventListener('click', async () => {
+// Auth Form Submit (Login or Sign Up)
+authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     clearError();
     const email = emailInput.value.trim();
     const password = passwordInput.value;
@@ -100,7 +102,8 @@ actionBtn.addEventListener('click', async () => {
 });
 
 // Play as Guest
-guestBtn.addEventListener('click', async () => {
+guestBtn.addEventListener('click', async (e) => {
+    e.preventDefault(); // Prevent any default action just in case
     clearError();
     try {
         await signInAnonymously(auth);
