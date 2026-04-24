@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Old Ham Farms | Community Hub</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+
+
+</head>
+<body class="m-0 p-0 overflow-x-hidden">
+
+    <!-- Sticky Navigation Bar -->
+    <nav class="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center w-full">
+        <div class="text-2xl font-orbitron font-bold tracking-wider neon-text-blue">
+            <a href="index.html">OLD HAM FARMS</a>
+        </div>
+        <div class="space-x-6 text-lg font-medium">
+            <a href="index.html" class="hover:text-blue-400 transition-colors">Home</a>
+            <a href="hub.html" class="hover:text-purple-400 transition-colors">Community Hub</a>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-12 flex justify-center min-h-[85vh] items-center">
+        <!-- Auth Section (Visible when logged out) -->
+        <div id="auth-section" class="glass p-8 md:p-12 rounded-2xl w-full max-w-md shadow-2xl flex flex-col items-center">
+            <h2 class="text-3xl font-orbitron font-bold mb-8 neon-text-purple text-center">ACCESS TERMINAL</h2>
+
+            <div class="w-full mb-6 flex flex-col gap-4">
+                <div id="username-container" class="hidden">
+                    <input type="text" id="username" placeholder="Choose a Username" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff]">
+                </div>
+                <input type="email" id="email" placeholder="Email Address" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff]">
+                <input type="password" id="password" placeholder="Password" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] focus:ring-1 focus:ring-[#00d4ff]">
+            </div>
+
+            <div id="auth-error" class="text-red-400 mb-4 text-sm hidden"></div>
+
+            <div class="flex flex-col gap-4 w-full">
+                <button id="action-btn" class="w-full py-3 rounded-md font-orbitron font-bold text-lg neon-btn-blue">
+                    LOGIN
+                </button>
+
+                <div class="text-center mt-2">
+                    <a href="#" id="toggle-auth-mode" class="text-sm text-gray-400 hover:text-[#00d4ff] transition-colors">Need an account? Sign Up</a>
+                </div>
+
+                <div class="flex items-center justify-center space-x-2 my-2">
+                    <div class="h-px bg-gray-600 w-1/4"></div>
+                    <span class="text-gray-400 text-sm font-orbitron">OR</span>
+                    <div class="h-px bg-gray-600 w-1/4"></div>
+                </div>
+                <button id="guest-btn" class="w-full py-3 rounded-md font-orbitron font-bold text-lg border-2 border-gray-500 text-gray-300 transition-all hover:border-white hover:text-white hover:shadow-[0_0_10px_white]">
+                    PLAY AS GUEST
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Section (Visible when logged in) -->
+        <div id="dashboard-section" class="glass p-8 md:p-12 rounded-2xl w-full max-w-2xl shadow-2xl hidden flex flex-col items-center">
+            <h2 class="text-4xl font-orbitron font-bold mb-2 neon-text-blue text-center">COMMAND CENTER</h2>
+            <p id="user-email-display" class="text-gray-400 mb-8 text-center"></p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full mb-8">
+                <!-- Radh Balance -->
+                <div class="glass p-6 rounded-xl flex flex-col items-center justify-center text-center">
+                    <h3 class="text-xl font-orbitron font-semibold text-gray-300 mb-2">Total Radh</h3>
+                    <div id="radh-balance" class="text-5xl font-orbitron font-bold neon-text-purple">...</div>
+                </div>
+
+                <!-- Web3 Wallet -->
+                <div class="glass p-6 rounded-xl flex flex-col items-center justify-center text-center">
+                    <h3 class="text-xl font-orbitron font-semibold text-gray-300 mb-4">Uplink Status</h3>
+                    <div id="wallet-status" class="text-sm text-gray-400 mb-4 break-all">Not Connected</div>
+                    <div class="flex flex-col gap-2 w-full px-4">
+                        <input type="text" id="manualWalletInput" placeholder="Paste Wallet Address" class="w-full p-2 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] text-center text-sm font-mono">
+                        <button id="connect-wallet-btn" class="w-full py-2 rounded-md font-orbitron font-bold neon-btn-blue text-sm">
+                            LINK WALLET
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="logout-btn" class="px-6 py-2 rounded-md font-orbitron font-bold neon-btn-purple text-sm hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_10px_red]">
+                DISCONNECT TERMINAL
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase and Logic Scripts -->
+    <script type="module" src="auth.js"></script>
+    <script type="module" src="wallet.js"></script>
+</body>
+</html>
