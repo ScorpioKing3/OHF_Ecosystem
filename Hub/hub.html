@@ -9,10 +9,7 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Ethers.js for Web3Modal logic -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
-    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
-    <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+
 </head>
 <body class="m-0 p-0 overflow-x-hidden">
 
@@ -78,9 +75,12 @@
                 <div class="glass p-6 rounded-xl flex flex-col items-center justify-center text-center">
                     <h3 class="text-xl font-orbitron font-semibold text-gray-300 mb-4">Uplink Status</h3>
                     <div id="wallet-status" class="text-sm text-gray-400 mb-4 break-all">Not Connected</div>
-                    <button id="connect-wallet-btn" class="px-6 py-2 rounded-md font-orbitron font-bold neon-btn-blue text-sm">
-                        CONNECT WALLET
-                    </button>
+                    <div class="flex flex-col gap-2 w-full px-4">
+                        <input type="text" id="manualWalletInput" placeholder="Paste Wallet Address" class="w-full p-2 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#00d4ff] text-center text-sm font-mono">
+                        <button id="connect-wallet-btn" class="w-full py-2 rounded-md font-orbitron font-bold neon-btn-blue text-sm">
+                            LINK WALLET
+                        </button>
+                    </div>
                 </div>
             </div>
 

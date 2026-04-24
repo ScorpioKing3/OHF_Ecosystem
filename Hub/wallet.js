@@ -4,25 +4,8 @@ import {
     updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
-// Web3Modal and Provider options
-const providerOptions = {
-  walletconnect: {
-    package: window.WalletConnectProvider ? window.WalletConnectProvider.default : null, // required
-    options: {
-      infuraId: "27e484dcd9e3efcfd25a83a78777cdf1" // generic placeholder to prevent silent failures
-    }
-  }
-};
-
-const Web3Modal = window.Web3Modal.default;
-
-const web3Modal = new Web3Modal({
-  cacheProvider: false, // optional
-  providerOptions, // required
-  theme: "dark"
-});
-
 const connectWalletBtn = document.getElementById('connect-wallet-btn');
+const manualWalletInput = document.getElementById('manualWalletInput');
 const walletStatusDisplay = document.getElementById('wallet-status');
 
 let currentUserUid = null;
@@ -36,7 +19,8 @@ window.addEventListener('userLoaded', (e) => {
         walletStatusDisplay.textContent = `Connected: ${existingWallet.substring(0, 6)}...${existingWallet.substring(existingWallet.length - 4)}`;
         walletStatusDisplay.classList.add('text-green-400');
         walletStatusDisplay.classList.remove('text-gray-400');
-        connectWalletBtn.textContent = 'CHANGE WALLET';
+        connectWalletBtn.textContent = 'UPDATE WALLET';
+        manualWalletInput.value = existingWallet;
     } else {
         resetWalletUI();
     }
@@ -46,35 +30,36 @@ window.addEventListener('userLoaded', (e) => {
 window.addEventListener('userLoggedOut', () => {
     currentUserUid = null;
     resetWalletUI();
-    web3Modal.clearCachedProvider();
 });
 
 function resetWalletUI() {
     walletStatusDisplay.textContent = 'Not Connected';
     walletStatusDisplay.classList.remove('text-green-400');
     walletStatusDisplay.classList.add('text-gray-400');
-    connectWalletBtn.textContent = 'CONNECT WALLET';
+    connectWalletBtn.textContent = 'LINK WALLET';
+    manualWalletInput.value = '';
 }
 
-async function connectWallet() {
+async function linkWallet() {
     if (!currentUserUid) {
         alert("Please ensure you are fully logged in first.");
         return;
     }
 
+    const address = manualWalletInput.value.trim();
+
+    // Validate Ethereum address (starts with 0x and is 42 characters long)
+    if (!address.startsWith('0x') || address.length !== 42) {
+        alert("Please enter a valid wallet address (must start with '0x' and be 42 characters long).");
+        return;
+    }
+
     try {
-        const provider = await web3Modal.connect();
-
-        // Wrap the provider with ethers
-        const ethersProvider = new window.ethers.providers.Web3Provider(provider);
-        const signer = ethersProvider.getSigner();
-        const address = await signer.getAddress();
-
-        // Update UI
+        // Update UI immediately for responsiveness
         walletStatusDisplay.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
         walletStatusDisplay.classList.add('text-green-400');
         walletStatusDisplay.classList.remove('text-gray-400');
-        connectWalletBtn.textContent = 'CHANGE WALLET';
+        connectWalletBtn.textContent = 'UPDATE WALLET';
 
         // Save to Firestore
         const userDocRef = doc(db, "users", currentUserUid);
@@ -82,33 +67,12 @@ async function connectWallet() {
             walletAddress: address
         });
 
-        console.log("Wallet connected and saved to Firestore:", address);
+        console.log("Wallet linked and saved to Firestore:", address);
 
-        // Subscribe to accounts change
-        provider.on("accountsChanged", async (accounts) => {
-          if (accounts.length > 0) {
-              const newAddress = accounts[0];
-              walletStatusDisplay.textContent = `Connected: ${newAddress.substring(0, 6)}...${newAddress.substring(newAddress.length - 4)}`;
-              await updateDoc(userDocRef, { walletAddress: newAddress });
-          } else {
-              resetWalletUI();
-          }
-        });
-
-        // Subscribe to chainId change
-        provider.on("chainChanged", (chainId) => {
-          console.log("Chain changed:", chainId);
-        });
-
-        // Subscribe to provider disconnection
-        provider.on("disconnect", (error) => {
-          console.log("Wallet disconnected:", error);
-          resetWalletUI();
-        });
-
-    } catch (e) {
-        console.error("Could not get a wallet connection", e);
+    } catch (error) {
+        console.error("Error linking wallet:", error);
+        alert("Failed to link wallet. Please try again.");
     }
 }
 
-connectWalletBtn.addEventListener('click', connectWallet);
+connectWalletBtn.addEventListener('click', linkWallet);
