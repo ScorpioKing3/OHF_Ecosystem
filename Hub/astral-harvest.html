@@ -144,12 +144,9 @@ const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 const AstralHarvest = () => {
   // --- ECONOMY STATE ---
   const [offChainRadh, setOffChainRadh] = useState(0);
-  const isTransacting = false;
-  const walletAddress = null;
-  const onChainHam = 0;
-  const isSaving = false;
   const [notification, setNotification] = useState("");
-  const EXCHANGE_RATE = 200;
+  const [cashOutAmount, setCashOutAmount] = useState(null);
+
   // --- META STATE ---
   const [gameState, setGameState] = useState('START');
   const [sector, setSector] = useState(1);
@@ -173,7 +170,6 @@ const AstralHarvest = () => {
   const [deckState, setDeckState] = useState({ drawPile: [], hand: [], discardPile: [] });
   const { drawPile, hand, discardPile } = deckState;
   const [marketCards, setMarketCards] = useState([]);
-  const [ledgerCards, setLedgerCards] = useState([]);
 
   // ==========================================
   // 🔔 IN-GAME NOTIFICATION SYSTEM
@@ -185,8 +181,6 @@ const AstralHarvest = () => {
 
 
   const saveProgressToCloud = async () => {};
-  const connectWallet = () => alert("Web3 features disabled in this build.");
-  const claimHamToWallet = () => alert("Web3 features disabled in this build.");
 
   // ==========================================
   // 🌱 GAME FLOW
@@ -195,12 +189,16 @@ const AstralHarvest = () => {
     let collToUse = collection;
     let activeToUse = activeDeckUids;
 
-    // FRESH WIPE / NEW GAME
-    if (collection.length === 0 || hull <= 0) {
+    // INITIALIZE DECK IF EMPTY
+    if (collection.length === 0) {
       collToUse = [...STARTING_DECK];
       activeToUse = STARTING_DECK.map(c => c.uid);
       setCollection(collToUse);
       setActiveDeckUids(activeToUse);
+    }
+
+    // IF DEAD OR FRESH RUN, RESET SHIP STATE BUT KEEP DECK
+    if (collection.length === 0 || hull <= 0 || gameState === 'WIN' || gameState === 'LOSE') {
       setHull(50);
       setMaxHull(50);
       setSector(1);
@@ -213,6 +211,7 @@ const AstralHarvest = () => {
       const activeCards = collToUse.filter(c => activeToUse.includes(c.uid));
       startWeek(activeCards, 1, 1);
     } else {
+      // RESUME EXISTING RUN
       const activeCards = collToUse.filter(c => activeToUse.includes(c.uid) && !exhaustedUids.includes(c.uid));
       startWeek(activeCards, sector, week);
     }
@@ -326,7 +325,12 @@ const AstralHarvest = () => {
     if (newHull <= 0) {
       setHull(0);
       setGameState('LOSE');
-      saveProgressToCloud(offChainRadh, collection, activeDeckUids, [], [null, null, null, null], 1, 1, 50);
+      if (window.recordMatchResult && offChainRadh > 0) {
+         window.recordMatchResult(offChainRadh, 0);
+         setCashOutAmount(offChainRadh);
+         setOffChainRadh(0);
+      }
+      saveProgressToCloud(0, collection, activeDeckUids, [], [null, null, null, null], 1, 1, 50);
       return;
     }
 
@@ -349,14 +353,25 @@ const AstralHarvest = () => {
 
         if (sector >= 10 && week >= 4) {
           setGameState('WIN');
+          if (window.recordMatchResult && newTotalRadh > 0) {
+             window.recordMatchResult(newTotalRadh, 0);
+             setCashOutAmount(newTotalRadh);
+             setOffChainRadh(0);
+          }
+          saveProgressToCloud(0, collection, activeDeckUids, exhaustedUids, nextPlots, sector, week, repairedHull);
         } else {
           generateMarket();
           setGameState('MARKET');
+          saveProgressToCloud(newTotalRadh, collection, activeDeckUids, exhaustedUids, nextPlots, sector, week, repairedHull);
         }
-        saveProgressToCloud(newTotalRadh, collection, activeDeckUids, exhaustedUids, nextPlots, sector, week, repairedHull);
       } else {
         setGameState('LOSE');
-        saveProgressToCloud(offChainRadh, collection, activeDeckUids, [], [null, null, null, null], 1, 1, 50);
+        if (window.recordMatchResult && offChainRadh > 0) {
+           window.recordMatchResult(offChainRadh, 0);
+           setCashOutAmount(offChainRadh);
+           setOffChainRadh(0);
+        }
+        saveProgressToCloud(0, collection, activeDeckUids, [], [null, null, null, null], 1, 1, 50);
       }
     }
   };
@@ -368,15 +383,8 @@ const AstralHarvest = () => {
     setDay(1);
     setPlots([null, null, null, null]);
     setExhaustedUids([]);
+    setCashOutAmount(null);
     setGameState('START');
-  };
-
-  const openAncientLedger = () => {
-    if (!walletAddress) return showNotification("Connect your Web3 wallet or activate the Mock Wallet to access the Ancient Ledger.");
-    const mythicCards = CARD_DB.filter(c => c.isMythic);
-    const ledger = mythicCards.map(c => ({ ...c, instanceId: generateUid() }));
-    setLedgerCards(ledger);
-    setGameState('LEDGER');
   };
 
   // ==========================================
@@ -447,34 +455,26 @@ const AstralHarvest = () => {
     if (card.isMythic) { typeStyle = "from-fuchsia-900 to-purple-950 border-fuchsia-400/80 shadow-[0_0_15px_rgba(217,70,239,0.3)]"; iconColor = "text-fuchsia-300"; }
 
     const isMarket = context === 'market';
-    const isLedger = context === 'ledger';
     const isDeckMgr = context === 'deck_manager';
     const isActiveInDeck = isDeckMgr ? activeDeckUids.includes(card.uid) : true;
 
     const handleClick = () => {
       if (isMarket) buyCardWithSlop(card);
-      else if (isLedger) buyCardWithHam(card);
       else if (isDeckMgr) toggleDeckCard(card.uid);
       else playCard(index);
     };
 
     return (
-      <button key={card.instanceId || card.uid || index} onClick={handleClick} disabled={isTransacting || (isMarket && offChainRadh < card.price) || (isLedger && onChainHam < card.priceHam) || (context==='hand' && !canPlay)}
+      <button key={card.instanceId || card.uid || index} onClick={handleClick} disabled={(isMarket && offChainRadh < card.price) || (context==='hand' && !canPlay)}
         className={`relative group w-28 h-40 md:w-40 md:h-56 rounded-xl border flex flex-col text-left transition-all duration-300 shrink-0 snap-center bg-gradient-to-b
-          ${(context === 'hand' && !canPlay) || (isMarket && offChainRadh < card.price) || (isLedger && onChainHam < card.priceHam) ? 'opacity-40 cursor-not-allowed saturate-50' : 'hover:-translate-y-2 hover:shadow-2xl cursor-pointer'}
+          ${(context === 'hand' && !canPlay) || (isMarket && offChainRadh < card.price) ? 'opacity-40 cursor-not-allowed saturate-50' : 'hover:-translate-y-2 hover:shadow-2xl cursor-pointer'}
           ${isDeckMgr && !isActiveInDeck ? 'opacity-40 grayscale hover:grayscale-0' : ''}
           ${isDeckMgr && isActiveInDeck ? 'shadow-[0_0_15px_rgba(52,211,153,0.4)] border-emerald-500/80' : ''}
-          ${typeStyle} overflow-hidden backdrop-blur-sm ${isTransacting && isLedger ? 'animate-pulse' : ''}`}
+          ${typeStyle} overflow-hidden backdrop-blur-sm`}
       >
-        {!isMarket && !isLedger && !isDeckMgr && <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-slate-950 border border-slate-500 text-slate-200 flex items-center justify-center font-black text-xs z-20">{card.cost}</div>}
+        {!isMarket && !isDeckMgr && <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-slate-950 border border-slate-500 text-slate-200 flex items-center justify-center font-black text-xs z-20">{card.cost}</div>}
         {isMarket && <div className="absolute top-2 right-2 bg-slate-950/80 px-2 py-1 rounded-md border border-cyan-500/50 text-cyan-400 font-bold flex items-center gap-1 z-20 backdrop-blur-md text-[9px]"><span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>📈</span> {card.price}</div>}
 
-        {/* NFT Mythic Badge */}
-        {isLedger && (
-          <div className="absolute top-2 right-2 bg-slate-950/80 px-2 py-1 rounded-md border border-pink-500/80 text-pink-400 font-bold flex items-center gap-1 z-20 backdrop-blur-md text-[9px] shadow-[0_0_10px_rgba(236,72,153,0.5)]">
-            <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🪙</span> {card.priceHam}
-          </div>
-        )}
         {card.isMythic && (
            <div className="absolute top-2 left-2 bg-fuchsia-600 text-white px-2 py-0.5 rounded-full text-[8px] font-black tracking-widest uppercase z-20 shadow-[0_0_10px_rgba(217,70,239,0.8)] border border-fuchsia-300">NFT</div>
         )}
@@ -538,21 +538,6 @@ const AstralHarvest = () => {
             <div className="flex items-center gap-1 text-cyan-400 font-bold text-xs"><span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>📈</span> {offChainRadh} Radh</div>
           </div>
           <div className="w-px h-6 bg-slate-700" />
-          <div className="flex flex-col items-end">
-            <span className="text-[8px] text-slate-500 uppercase tracking-widest flex items-center gap-1">
-              {isSaving && <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🔄</span>} Web3 Wallet
-            </span>
-            {walletAddress ? (
-              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={openAncientLedger} title="Open Ancient Ledger">
-                <div className="text-pink-400 font-bold text-xs flex items-center gap-1"><span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🪙</span> {onChainHam} $HAM</div>
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_#10b981] animate-pulse"/>
-              </div>
-            ) : (
-              <button onClick={connectWallet} className="flex items-center gap-1 bg-pink-900/30 border border-pink-500/50 text-pink-300 px-2 py-0.5 rounded text-[10px] hover:bg-pink-900/50 transition-colors">
-                <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>💳</span> Connect
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
@@ -565,58 +550,12 @@ const AstralHarvest = () => {
             <div className="max-w-md w-full text-center space-y-6 bg-slate-900/40 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl shadow-2xl">
               <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🌾</span>
               <h1 className="text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-teal-700">ASTRAL HARVEST</h1>
-              <p className="text-xs text-slate-400 mb-8">Establish your farm locally. Connect your Web3 wallet to access cross-game NFT assets in the Ancient Ledger.</p>
-
-              {walletAddress && (
-                 <button onClick={openAncientLedger} className="mb-4 w-full py-3 bg-pink-900/20 border border-pink-500/50 text-pink-200 font-bold rounded-full text-xs uppercase tracking-widest hover:bg-pink-900/40 transition-all flex justify-center items-center gap-2">
-                   <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>📜</span> Open Ancient Ledger
-                 </button>
-              )}
+              <p className="text-xs text-slate-400 mb-8">Establish your farm locally.</p>
 
               <button onClick={startSimulation} className="w-full py-4 bg-emerald-600/20 border border-emerald-500/50 text-emerald-100 font-bold rounded-full text-sm uppercase tracking-widest hover:bg-emerald-600/40 transition-all mb-4">
                 {hasActiveRun ? 'Resume Expedition' : 'Commence New Expedition'}
               </button>
-
-              {!walletAddress && (
-                <div className="border-t border-slate-800 pt-4 mt-4">
-                   <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-3">No MetaMask Extension?</p>
-                   <button onClick={connectWallet} className="w-full py-3 bg-slate-800 border border-slate-700 text-slate-300 font-bold rounded-full text-xs uppercase tracking-widest hover:bg-slate-700 transition-all flex justify-center items-center gap-2">
-                     <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>📈</span> Generate Mock Wallet
-                   </button>
-                </div>
-              )}
             </div>
-          </div>
-        )}
-
-        {/* --- ANCIENT LEDGER (WEB3 MARKET) --- */}
-        {gameState === 'LEDGER' && (
-          <div className="absolute inset-0 flex flex-col items-center p-4 md:p-8 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-950 to-black overflow-y-auto pb-24 custom-scrollbar">
-            <h2 className="text-2xl md:text-3xl font-light tracking-widest mb-2 text-fuchsia-400 mt-4 flex items-center gap-3"><span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>📜</span> THE ANCIENT LEDGER</h2>
-            <p className="text-[10px] text-slate-400 mb-8 uppercase text-center tracking-widest max-w-lg leading-relaxed">
-              Spend $HAM to acquire Mythic agricultural technology. These rare NFT assets are permanently added to your collection and can be ported across all Old Ham Farms experiences.
-            </p>
-
-            <div className="flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800 mb-8 w-full max-w-lg">
-              <div className="text-center">
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Web3 Wallet</div>
-                <div className="text-2xl text-pink-400 font-bold flex items-center justify-center gap-2">
-                  <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🪙</span> {onChainHam} <span className="text-sm">$HAM</span>
-                </div>
-                {walletAddress.startsWith("0xM0CK") && <div className="text-[8px] text-amber-500 uppercase tracking-widest mt-1">Simulated Web3 Network</div>}
-              </div>
-              <button onClick={() => setGameState('BANK')} className="px-4 py-2 border border-slate-600 rounded-full text-xs text-slate-300 hover:bg-slate-800 transition">Mint More $HAM</button>
-            </div>
-
-            <div className="flex flex-wrap justify-center gap-4 mb-12 w-full max-w-4xl">
-              {ledgerCards.map((card, idx) => renderCard(card, idx, true, 'ledger'))}
-            </div>
-
-            <button
-              onClick={() => setGameState('START')}
-              className="w-full max-w-sm py-4 bg-slate-800 border border-slate-600 text-slate-200 font-bold tracking-[0.2em] uppercase rounded-full hover:bg-slate-700 transition-all text-xs">
-              Close Ledger
-            </button>
           </div>
         )}
 
@@ -649,36 +588,6 @@ const AstralHarvest = () => {
                </button>
              </div>
            </div>
-        )}
-
-        {/* --- GALACTIC BANK --- */}
-        {gameState === 'BANK' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-            <div className="max-w-lg w-full bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
-              <div className="flex items-center justify-between mb-8 border-b border-slate-800 pb-4">
-                <h2 className="text-2xl font-light text-pink-400 tracking-widest flex items-center gap-2"><span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🏦</span> GALACTIC BANK</h2>
-                <button onClick={() => setGameState('START')} className="text-xs text-slate-400 hover:text-white uppercase tracking-widest">Return</button>
-              </div>
-              <div className="flex justify-between items-center bg-slate-950 p-6 rounded-xl border border-slate-800 mb-6">
-                <div className="text-center">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Local Balance</div>
-                  <div className="text-2xl text-cyan-400 font-bold">{offChainRadh} <span className="text-sm">Radh</span></div>
-                </div>
-                <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>➡️</span>
-                <div className="text-center">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Web3 Wallet</div>
-                  <div className="text-2xl text-pink-400 font-bold">{onChainHam} <span className="text-sm">$HAM</span></div>
-                </div>
-              </div>
-              <div className="text-center text-xs text-slate-400 mb-8 bg-pink-950/20 p-4 rounded-lg border border-pink-900/30">
-                Current Exchange Rate: <strong className="text-white">{EXCHANGE_RATE} Radh = 1 $HAM</strong><br/>
-                <span className="opacity-70 mt-2 block">Transferring game points to the blockchain requires a smart contract transaction.</span>
-              </div>
-              <button onClick={claimHamToWallet} disabled={isTransacting || offChainRadh < EXCHANGE_RATE} className="w-full py-4 bg-pink-600 hover:bg-pink-500 text-white font-bold tracking-[0.2em] uppercase rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed">
-                {isTransacting ? 'Transacting...' : 'Mint $HAM to Wallet'}
-              </button>
-            </div>
-          </div>
         )}
 
         {/* --- MARKET SCREEN --- */}
@@ -794,6 +703,13 @@ const AstralHarvest = () => {
                          ? 'The hazards of the Void were too much. The ship has decompressed. You must reboot the simulation, but your Deck Collection remains intact.'
                          : `You failed to meet the weekly quota of ${quota} Slop. The Obsidian Consortium has seized your hydroponics bays. You must reboot the simulation, but your Deck Collection remains intact.`)}
                  </p>
+                 {cashOutAmount !== null && (
+                    <div className="mb-8 p-4 bg-slate-950 border border-emerald-500/50 rounded-xl">
+                      <p className="text-emerald-400 font-bold uppercase tracking-widest text-sm">
+                        Run Ended: {cashOutAmount} $RADH transferred to Hub Vault
+                      </p>
+                    </div>
+                 )}
                  <button onClick={clearRunState} className="w-full py-4 bg-slate-800 text-white text-xs font-bold uppercase tracking-widest rounded-full hover:bg-slate-700 transition-all">
                    Return to Hub
                  </button>
