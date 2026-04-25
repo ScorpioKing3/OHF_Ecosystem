@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Old Ham Farms | Market</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="m-0 p-0 overflow-x-hidden bg-[#020024] text-white">
+
+    <!-- Sticky Navigation Bar -->
+    <nav class="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center w-full">
+        <div class="flex items-center space-x-6">
+            <div class="text-2xl font-orbitron font-bold tracking-wider neon-text-blue">
+                <a href="index.html">OLD HAM FARMS</a>
+            </div>
+
+            <!-- Player HUD (Hidden by default) -->
+            <div id="player-hud" class="hidden items-center space-x-4 ml-6 px-4 py-1 rounded-full border border-gray-600 bg-[#020024] bg-opacity-80 text-sm font-orbitron">
+                <span id="hud-agent" class="text-gray-300 font-bold">Agent: ...</span>
+                <span class="text-gray-500">|</span>
+                <span id="hud-ham" class="neon-text-blue font-bold">$HAM: 0</span>
+                <span class="text-gray-500">|</span>
+                <span id="hud-radh" class="neon-text-purple font-bold">$RADH: 0</span>
+            </div>
+        </div>
+
+        <div class="space-x-6 text-lg font-medium flex items-center">
+            <a href="index.html" class="hover:text-blue-400 transition-colors">Home</a>
+            <a href="hub.html" class="hover:text-purple-400 transition-colors">Community Hub</a>
+            <a href="hangar.html" class="hover:text-purple-400 transition-colors">Hangar Bay</a>
+            <a href="market.html" class="hover:text-blue-400 transition-colors">Market</a>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-16 flex flex-col items-center">
+        <h1 class="text-5xl font-orbitron font-bold mb-12 neon-text-blue text-center uppercase tracking-widest">Global Market</h1>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 w-full max-w-6xl">
+            <!-- Exchange Terminal -->
+            <div class="glass p-8 rounded-2xl border border-gray-600 flex flex-col items-center shadow-2xl">
+                <h2 class="text-3xl font-orbitron font-bold mb-6 neon-text-purple text-center">Exchange Terminal</h2>
+                <p class="text-gray-400 mb-8 text-center">Convert your raw $RADH into refined $HAM tokens. Rate: 10 $RADH = 1 $HAM.</p>
+
+                <div class="w-full max-w-sm flex flex-col gap-4">
+                    <label for="radh-amount" class="text-sm text-gray-400 font-orbitron">Amount of $RADH to convert</label>
+                    <input type="number" id="radh-amount" placeholder="0" min="10" step="10" class="w-full p-3 rounded bg-[#020024] border border-gray-600 text-white focus:outline-none focus:border-[#b026ff] focus:ring-1 focus:ring-[#b026ff] text-center text-xl font-orbitron">
+
+                    <button id="convert-btn" class="w-full py-3 mt-4 rounded-md font-orbitron font-bold text-lg neon-btn-purple">
+                        CONVERT TO $HAM
+                    </button>
+                    <div id="exchange-msg" class="text-center text-sm font-orbitron mt-2 hidden"></div>
+                </div>
+            </div>
+
+            <!-- NFT Vendor -->
+            <div class="glass p-8 rounded-2xl border border-gray-600 flex flex-col items-center shadow-2xl">
+                <h2 class="text-3xl font-orbitron font-bold mb-6 neon-text-blue text-center">NFT Vendor</h2>
+                <p class="text-gray-400 mb-8 text-center">Acquire powerful Cross-Game Cards using $HAM.</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
+                    <!-- Elder Hooves -->
+                    <div class="glass p-4 rounded-xl border border-gray-700 flex flex-col items-center hover:border-[#00d4ff] transition-colors">
+                        <div class="h-32 w-32 bg-gray-800 rounded-lg mb-4 flex items-center justify-center border border-gray-600">
+                            <span class="text-4xl">🦌</span>
+                        </div>
+                        <h3 class="text-xl font-orbitron font-bold text-white mb-2 text-center">Elder Hooves</h3>
+                        <p class="text-gray-400 mb-4 font-orbitron">Cost: <span class="text-[#00d4ff] font-bold">100 $HAM</span></p>
+                        <button class="buy-card-btn w-full py-2 rounded font-orbitron font-bold text-sm border-2 border-[#00d4ff] text-[#00d4ff] hover:bg-[#00d4ff] hover:text-[#020024] transition-colors" data-card="Elder Hooves" data-cost="100">
+                            BUY CARD
+                        </button>
+                    </div>
+
+                    <!-- Dreadnought Queen -->
+                    <div class="glass p-4 rounded-xl border border-gray-700 flex flex-col items-center hover:border-[#b026ff] transition-colors">
+                        <div class="h-32 w-32 bg-gray-800 rounded-lg mb-4 flex items-center justify-center border border-gray-600">
+                            <span class="text-4xl">👑</span>
+                        </div>
+                        <h3 class="text-xl font-orbitron font-bold text-white mb-2 text-center">Dreadnought Queen</h3>
+                        <p class="text-gray-400 mb-4 font-orbitron">Cost: <span class="text-[#b026ff] font-bold">250 $HAM</span></p>
+                        <button class="buy-card-btn w-full py-2 rounded font-orbitron font-bold text-sm border-2 border-[#b026ff] text-[#b026ff] hover:bg-[#b026ff] hover:text-[#020024] transition-colors" data-card="Dreadnought Queen" data-cost="250">
+                            BUY CARD
+                        </button>
+                    </div>
+                </div>
+                <div id="vendor-msg" class="text-center text-sm font-orbitron mt-6 hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase and Logic Scripts -->
+    <script type="module" src="auth.js"></script>
+    <script type="module" src="wallet.js"></script>
+    <script type="module" src="market.js"></script>
+</body>
+</html>
