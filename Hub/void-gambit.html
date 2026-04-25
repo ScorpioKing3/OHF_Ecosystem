@@ -52,11 +52,12 @@
     <!-- Expose RTDB to Global Window for React -->
     <script type="module">
         import { rtdb } from './firebase.js';
-        import { ref, set, onValue, remove, push, get } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-database.js";
+        import { ref, set, update, onValue, remove, push, get } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-database.js";
 
         window.firebaseDB = rtdb;
         window.firebaseDBRef = ref;
         window.firebaseDBSet = set;
+        window.firebaseDBUpdate = update;
         window.firebaseDBOnValue = onValue;
         window.firebaseDBRemove = remove;
         window.firebaseDBPush = push;
@@ -178,6 +179,8 @@ const VoidGambit = () => {
   const [winner, setWinner] = useState(null);
 
   // Match State
+  const [matchId, setMatchId] = useState(null);
+  const [userColor, setUserColor] = useState('white');
   const [board, setBoard] = useState([]);
   const [turn, setTurn] = useState('white');
   const [ap, setAp] = useState(2);
@@ -249,29 +252,79 @@ const VoidGambit = () => {
         const queueData = snapshot.val();
         const playersInQueue = Object.values(queueData);
 
-        // Find our player and another player
+        // Find our player
         const me = playersInQueue.find(p => p.uid === uid);
-        const opponent = playersInQueue.find(p => p.uid !== uid);
 
-        if (me && opponent) {
+        // Check if a match was found and assigned to us by someone else
+        if (me && me.matchId) {
+            setMatchId(me.matchId);
+            setUserColor(me.color);
+            setGameState('playing');
+            showToast("Match Found!");
+            window.firebaseDBRemove(window.firebaseDBRef(window.firebaseDB, `matchmakingQueue/${uid}`));
+            return;
+        }
+
+        // Only search for an opponent if we haven't been assigned a match
+        const opponent = playersInQueue.find(p => p.uid !== uid && !p.matchId);
+
+        if (me && opponent && !me.matchId) {
           // Both are in the queue. Create a match!
           // Only the lower alphabetical UID handles the creation to avoid duplicate matches
           const playerIds = [uid, opponent.uid].sort();
+
           if (uid === playerIds[0]) {
             const matchRef = window.firebaseDBPush(window.firebaseDBRef(window.firebaseDB, 'activeMatches'));
-            const matchId = matchRef.key;
+            const createdMatchId = matchRef.key;
+
+            // Generate initial state
+            const wDeck = [...collection].sort(() => Math.random() - 0.5);
+            // Default opponent deck (in real scenario, we'd fetch opponent's collection)
+            const bDeck = [...DEFAULT_DECK].sort(() => Math.random() - 0.5);
+
+            let pWhite = { deck: wDeck, hand: [], discard: [] };
+            let pBlack = { deck: bDeck, hand: [], discard: [] };
+
+            pWhite = drawCards(pWhite, 5);
+            pBlack = drawCards(pBlack, 5);
+
+            const initialBoard = [
+              { id: 'wk', type: 'king', color: 'white', x: 4, y: 7 },
+              { id: 'w1', type: 'pawn', color: 'white', x: 3, y: 6 },
+              { id: 'w2', type: 'pawn', color: 'white', x: 4, y: 6 },
+              { id: 'w3', type: 'pawn', color: 'white', x: 5, y: 6 },
+
+              { id: 'bk', type: 'king', color: 'black', x: 4, y: 0 },
+              { id: 'b1', type: 'pawn', color: 'black', x: 3, y: 1 },
+              { id: 'b2', type: 'pawn', color: 'black', x: 4, y: 1 },
+              { id: 'b3', type: 'pawn', color: 'black', x: 5, y: 1 },
+            ];
 
             window.firebaseDBSet(matchRef, {
               player1: me,
               player2: opponent,
-              status: 'match_found'
+              status: 'match_found',
+              board: initialBoard,
+              turn: 'white',
+              ap: 2,
+              players: { white: pWhite, black: pBlack },
+              white: uid,
+              black: opponent.uid
             });
 
-            // Remove both from queue
+            // Update opponent's queue node with matchId and color
+            window.firebaseDBUpdate(window.firebaseDBRef(window.firebaseDB, `matchmakingQueue/${opponent.uid}`), {
+                matchId: createdMatchId,
+                color: 'black'
+            });
+
+            // Remove ourselves from the queue and enter the match
             window.firebaseDBRemove(window.firebaseDBRef(window.firebaseDB, `matchmakingQueue/${uid}`));
-            window.firebaseDBRemove(window.firebaseDBRef(window.firebaseDB, `matchmakingQueue/${opponent.uid}`));
+            setMatchId(createdMatchId);
+            setUserColor('white');
+            setGameState('playing');
+            showToast("Match Found!");
           }
-          showToast("Match Found!");
         }
       });
 
@@ -326,17 +379,38 @@ const VoidGambit = () => {
   };
 
   // --- CORE ACTIONS ---
+  const syncStateToFirebase = (newBoard, newPlayers, newTurn, newAp, newWinner) => {
+    if (mode === 'pvp' && matchId) {
+      const matchRef = window.firebaseDBRef(window.firebaseDB, `activeMatches/${matchId}`);
+      const payload = {};
+      if (newBoard) payload.board = newBoard;
+      if (newPlayers) payload.players = newPlayers;
+      if (newTurn) payload.turn = newTurn;
+      if (newAp !== undefined) payload.ap = newAp;
+      if (newWinner) payload.winner = newWinner;
+
+      // We only push to Firebase; the onValue listener handles updating local state.
+      window.firebaseDBUpdate(matchRef, payload).catch(err => {
+         console.error("Failed to sync state to Firebase", err);
+      });
+
+      // Clear selections locally
+      setSelectedPiece(null);
+      setSelectedCommand(null);
+    }
+  };
+
   const executeMove = (pieceId, targetX, targetY, commandIndex = -1) => {
-    setBoard(prevBoard => {
-      let newBoard = [...prevBoard];
+    let newBoard = [...board];
+    let newWinner = winner;
 
-      // Capture logic
-      const capturedIndex = newBoard.findIndex(p => p.x === targetX && p.y === targetY);
-      if (capturedIndex !== -1) {
-        if (newBoard[capturedIndex].type === 'king') {
-          setWinner(turn);
+    // Capture logic
+    const capturedIndex = newBoard.findIndex(p => p.x === targetX && p.y === targetY);
+    if (capturedIndex !== -1) {
+      if (newBoard[capturedIndex].type === 'king') {
+        newWinner = turn;
+        if (mode !== 'pvp') {
           setGameState('gameover');
-
           let payout = 0;
           let rankChange = 0;
           if (turn === 'white') {
@@ -351,24 +425,35 @@ const VoidGambit = () => {
              window.recordMatchResult(payout, rankChange);
           }
         }
-        newBoard.splice(capturedIndex, 1);
       }
+      newBoard.splice(capturedIndex, 1);
+    }
 
-      // Move logic
-      const pIndex = newBoard.findIndex(p => p.id === pieceId);
-      newBoard[pIndex] = { ...newBoard[pIndex], x: targetX, y: targetY };
-      return newBoard;
-    });
+    // Move logic
+    const pIndex = newBoard.findIndex(p => p.id === pieceId);
+    newBoard[pIndex] = { ...newBoard[pIndex], x: targetX, y: targetY };
 
-    consumeAction(commandIndex);
+    if (mode === 'pvp') {
+      consumeAction(commandIndex, newBoard, newWinner);
+    } else {
+      setBoard(newBoard);
+      if (newWinner) setWinner(newWinner);
+      consumeAction(commandIndex);
+    }
   };
 
   const executeDeploy = (type, targetX, targetY, commandIndex) => {
-    setBoard(prev => [...prev, { id: generateId(), type, color: turn, x: targetX, y: targetY }]);
-    consumeAction(commandIndex);
+    const newBoard = [...board, { id: generateId(), type, color: turn, x: targetX, y: targetY }];
+
+    if (mode === 'pvp') {
+      consumeAction(commandIndex, newBoard, winner);
+    } else {
+      setBoard(newBoard);
+      consumeAction(commandIndex);
+    }
   };
 
-  const consumeAction = (commandIndex) => {
+  const consumeAction = (commandIndex, pendingBoard = null, pendingWinner = null) => {
     let currentPlayerState = { ...players[turn] };
 
     // Spend Command Card if applicable (King moves are free from cards, but cost AP)
@@ -377,19 +462,24 @@ const VoidGambit = () => {
       currentPlayerState.discard.push(spentCard);
     }
 
-    setPlayers(prev => ({ ...prev, [turn]: currentPlayerState }));
+    const newPlayers = { ...players, [turn]: currentPlayerState };
 
     // AP Logic
     if (ap <= 1) {
-      endTurn(currentPlayerState);
+      endTurn(currentPlayerState, pendingBoard, pendingWinner, newPlayers);
     } else {
-      setAp(ap - 1);
-      setSelectedPiece(null);
-      setSelectedCommand(null);
+      if (mode === 'pvp') {
+        syncStateToFirebase(pendingBoard, newPlayers, turn, ap - 1, pendingWinner);
+      } else {
+        setPlayers(newPlayers);
+        setAp(ap - 1);
+        setSelectedPiece(null);
+        setSelectedCommand(null);
+      }
     }
   };
 
-  const endTurn = (finalPlayerState = null) => {
+  const endTurn = (finalPlayerState = null, pendingBoard = null, pendingWinner = null, pendingPlayers = null) => {
     // Replenish Hand
     let pState = finalPlayerState || { ...players[turn] };
     const cardsNeeded = Math.max(0, 5 - pState.hand.length);
@@ -397,16 +487,24 @@ const VoidGambit = () => {
 
     const nextTurn = turn === 'white' ? 'black' : 'white';
 
-    setPlayers(prev => ({ ...prev, [turn]: pState }));
-    setTurn(nextTurn);
-    setAp(2);
-    setSelectedPiece(null);
-    setSelectedCommand(null);
+    let newPlayersObj = pendingPlayers || { ...players };
+    newPlayersObj[turn] = pState;
+
+    if (mode === 'pvp') {
+      syncStateToFirebase(pendingBoard || board, newPlayersObj, nextTurn, 2, pendingWinner || winner);
+    } else {
+      setPlayers(newPlayersObj);
+      setTurn(nextTurn);
+      setAp(2);
+      setSelectedPiece(null);
+      setSelectedCommand(null);
+    }
   };
 
   // --- PLAYER INTERACTION LOGIC ---
   const handleSquareClick = (x, y) => {
     if (turn !== 'white' && mode !== 'pvp') return; // Block input during AI turn
+    if (mode === 'pvp' && turn !== userColor) return; // Block input if it's not the user's turn in PvP
 
     const clickedPiece = board.find(p => p.x === x && p.y === y);
 
@@ -454,6 +552,34 @@ const VoidGambit = () => {
     }
   };
 
+
+  // --- PVP SYNC LISTENER ---
+  useEffect(() => {
+    if (gameState !== 'playing' || mode !== 'pvp' || !matchId) return;
+
+    const matchRef = window.firebaseDBRef(window.firebaseDB, `activeMatches/${matchId}`);
+
+    const unsubscribe = window.firebaseDBOnValue(matchRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const matchData = snapshot.val();
+
+        // Update local state to perfectly match Firebase (Single Source of Truth)
+        if (matchData.board) setBoard(matchData.board);
+        if (matchData.turn) setTurn(matchData.turn);
+        if (matchData.ap !== undefined) setAp(matchData.ap);
+        if (matchData.players) setPlayers(matchData.players);
+
+        if (matchData.winner) {
+          setWinner(matchData.winner);
+          setGameState('gameover');
+        }
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [gameState, mode, matchId]);
 
   // --- AI LOGIC ---
   useEffect(() => {
@@ -743,7 +869,7 @@ const VoidGambit = () => {
   }
 
   // --- PLAYING STATE RENDER VARIABLES ---
-  const activePlayerState = players[turn];
+  const activePlayerState = mode === 'pvp' ? players[userColor] : players[turn];
   let validMoveSquares = [];
   if (selectedPiece && selectedPiece.color === turn) {
      validMoveSquares = getValidMoves(selectedPiece, board);
@@ -834,6 +960,11 @@ const VoidGambit = () => {
              <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>🤖</span>
              <p className="text-sm font-bold uppercase tracking-widest">Syndicate Calculating...</p>
            </div>
+        ) : (mode === 'pvp' && turn !== userColor) ? (
+           <div className="h-28 flex flex-col items-center justify-center text-slate-500 animate-pulse">
+             <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>⏳</span>
+             <p className="text-sm font-bold uppercase tracking-widest">Awaiting Opponent...</p>
+           </div>
         ) : (
           <>
             <div className="flex justify-between items-end mb-3 px-1">
@@ -872,7 +1003,13 @@ const VoidGambit = () => {
 
             <div className="mt-3 flex gap-2">
                <button
-                 onClick={() => endTurn()}
+                 onClick={() => {
+                   if (mode === 'pvp' && turn !== userColor) {
+                      showToast("Not your turn!");
+                   } else {
+                      endTurn();
+                   }
+                 }}
                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-colors flex items-center justify-center gap-2"
                >
                  End Turn <span className="inline-block" style={{fontFamily: 'sans-serif', margin: '0 4px'}}>➡️</span>
