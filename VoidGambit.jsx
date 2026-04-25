@@ -176,7 +176,7 @@ export default function VoidGambit() {
   // --- CORE ACTIONS ---
   const executeMove = (pieceId, targetX, targetY, commandIndex = -1) => {
     setBoard(prevBoard => {
-      let newBoard = [...prevBoard];
+      let newBoard = JSON.parse(JSON.stringify(prevBoard));
       
       // Capture logic
       const capturedIndex = newBoard.findIndex(p => p.x === targetX && p.y === targetY);
@@ -201,12 +201,17 @@ export default function VoidGambit() {
   };
 
   const executeDeploy = (type, targetX, targetY, commandIndex) => {
-    setBoard(prev => [...prev, { id: generateId(), type, color: turn, x: targetX, y: targetY }]);
+    setBoard(prev => {
+      let newBoard = JSON.parse(JSON.stringify(prev));
+      newBoard.push({ id: generateId(), type, color: turn, x: targetX, y: targetY });
+      return newBoard;
+    });
     consumeAction(commandIndex);
   };
 
   const consumeAction = (commandIndex) => {
-    let currentPlayerState = { ...players[turn] };
+    let newPlayers = JSON.parse(JSON.stringify(players));
+    let currentPlayerState = newPlayers[turn];
     
     // Spend Command Card if applicable (King moves are free from cards, but cost AP)
     if (commandIndex !== -1) {
@@ -214,7 +219,11 @@ export default function VoidGambit() {
       currentPlayerState.discard.push(spentCard);
     }
 
-    setPlayers(prev => ({ ...prev, [turn]: currentPlayerState }));
+    setPlayers(prev => {
+      let p = JSON.parse(JSON.stringify(prev));
+      p[turn] = currentPlayerState;
+      return p;
+    });
     
     // AP Logic
     if (ap <= 1) {
@@ -228,13 +237,17 @@ export default function VoidGambit() {
 
   const endTurn = (finalPlayerState = null) => {
     // Replenish Hand
-    let pState = finalPlayerState || { ...players[turn] };
+    let pState = finalPlayerState ? JSON.parse(JSON.stringify(finalPlayerState)) : JSON.parse(JSON.stringify(players[turn]));
     const cardsNeeded = Math.max(0, 5 - pState.hand.length);
     if (cardsNeeded > 0) pState = drawCards(pState, cardsNeeded);
     
     const nextTurn = turn === 'white' ? 'black' : 'white';
     
-    setPlayers(prev => ({ ...prev, [turn]: pState }));
+    setPlayers(prev => {
+      let p = JSON.parse(JSON.stringify(prev));
+      p[turn] = pState;
+      return p;
+    });
     setTurn(nextTurn);
     setAp(2);
     setSelectedPiece(null);

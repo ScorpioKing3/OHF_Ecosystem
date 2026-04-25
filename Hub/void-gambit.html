@@ -383,8 +383,8 @@ const VoidGambit = () => {
     if (mode === 'pvp' && matchId) {
       const matchRef = window.firebaseDBRef(window.firebaseDB, `activeMatches/${matchId}`);
       const payload = {};
-      if (newBoard) payload.board = newBoard;
-      if (newPlayers) payload.players = newPlayers;
+      if (newBoard) payload.board = JSON.parse(JSON.stringify(newBoard));
+      if (newPlayers) payload.players = JSON.parse(JSON.stringify(newPlayers));
       if (newTurn) payload.turn = newTurn;
       if (newAp !== undefined) payload.ap = newAp;
       if (newWinner) payload.winner = newWinner;
@@ -401,7 +401,7 @@ const VoidGambit = () => {
   };
 
   const executeMove = (pieceId, targetX, targetY, commandIndex = -1) => {
-    let newBoard = [...board];
+    let newBoard = JSON.parse(JSON.stringify(board));
     let newWinner = winner;
 
     // Capture logic
@@ -443,7 +443,8 @@ const VoidGambit = () => {
   };
 
   const executeDeploy = (type, targetX, targetY, commandIndex) => {
-    const newBoard = [...board, { id: generateId(), type, color: turn, x: targetX, y: targetY }];
+    const newBoard = JSON.parse(JSON.stringify(board));
+    newBoard.push({ id: generateId(), type, color: turn, x: targetX, y: targetY });
 
     if (mode === 'pvp') {
       consumeAction(commandIndex, newBoard, winner);
@@ -454,15 +455,14 @@ const VoidGambit = () => {
   };
 
   const consumeAction = (commandIndex, pendingBoard = null, pendingWinner = null) => {
-    let currentPlayerState = { ...players[turn] };
+    let newPlayers = JSON.parse(JSON.stringify(players));
+    let currentPlayerState = newPlayers[turn];
 
     // Spend Command Card if applicable (King moves are free from cards, but cost AP)
     if (commandIndex !== -1) {
       const spentCard = currentPlayerState.hand.splice(commandIndex, 1)[0];
       currentPlayerState.discard.push(spentCard);
     }
-
-    const newPlayers = { ...players, [turn]: currentPlayerState };
 
     // AP Logic
     if (ap <= 1) {
@@ -480,14 +480,15 @@ const VoidGambit = () => {
   };
 
   const endTurn = (finalPlayerState = null, pendingBoard = null, pendingWinner = null, pendingPlayers = null) => {
+    let newPlayersObj = pendingPlayers ? JSON.parse(JSON.stringify(pendingPlayers)) : JSON.parse(JSON.stringify(players));
+
     // Replenish Hand
-    let pState = finalPlayerState || { ...players[turn] };
+    let pState = finalPlayerState ? JSON.parse(JSON.stringify(finalPlayerState)) : newPlayersObj[turn];
     const cardsNeeded = Math.max(0, 5 - pState.hand.length);
     if (cardsNeeded > 0) pState = drawCards(pState, cardsNeeded);
 
     const nextTurn = turn === 'white' ? 'black' : 'white';
 
-    let newPlayersObj = pendingPlayers || { ...players };
     newPlayersObj[turn] = pState;
 
     if (mode === 'pvp') {
@@ -910,7 +911,7 @@ const VoidGambit = () => {
 
       {/* BATTLEFIELD */}
       <div className="flex-1 flex items-center justify-center p-2 sm:p-6 relative">
-        <div className="w-full max-w-2xl aspect-square grid grid-cols-8 border-4 border-slate-800 rounded-sm shadow-2xl shadow-cyan-900/10">
+        <div className={`w-full max-w-2xl aspect-square grid grid-cols-8 border-4 border-slate-800 rounded-sm shadow-2xl shadow-cyan-900/10 ${userColor === 'black' ? 'rotate-180' : ''}`}>
           {[...Array(64)].map((_, i) => {
             const x = i % 8;
             const y = Math.floor(i / 8);
@@ -942,6 +943,7 @@ const VoidGambit = () => {
                     relative z-10 transition-transform select-none
                     ${piece.color === 'white' ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-slate-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.3)] font-bold'}
                     ${isSelected ? 'scale-110' : ''}
+                    ${userColor === 'black' ? 'rotate-180' : ''}
                   `}>
                     {PIECE_TYPES[piece.type].symbol}
                   </span>
