@@ -254,6 +254,23 @@ window.recordArenaFee = async (cost) => {
     }
 };
 
+window.refundArenaFee = async (amount) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+            radhBalance: increment(amount)
+        });
+
+        // Re-load dashboard to sync UI and dispatch event
+        await loadDashboard(user);
+    } catch (error) {
+        console.error("Error refunding Arena fee:", error);
+    }
+};
+
 // Auth State Observer
 onAuthStateChanged(auth, (user) => {
     if (user) {
