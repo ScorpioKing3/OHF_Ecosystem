@@ -166,7 +166,7 @@ async function loadDashboard(user) {
             }
 
             // Dispatch custom event if wallet.js needs to know user loaded
-            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: data.walletAddress, radhBalance: currentRadh, rank: currentRank } }));
+            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, displayName: displayUsername, walletAddress: data.walletAddress, radhBalance: currentRadh, rank: currentRank } }));
         } else {
             // First time logic (Sign up or new Guest)
             const newUsername = pendingUsername || (user.isAnonymous ? "New OHF Agent!" : "Operative");
@@ -193,7 +193,7 @@ async function loadDashboard(user) {
             });
             pendingUsername = null; // Clear it out
 
-            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: null, radhBalance: 0, rank: 1000 } }));
+            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, displayName: newUsername, walletAddress: null, radhBalance: 0, rank: 1000 } }));
         }
     } catch (error) {
         console.error("Error fetching user data:", error);
@@ -234,6 +234,23 @@ window.recordArmoryPurchase = async (cost) => {
         await loadDashboard(user);
     } catch (error) {
         console.error("Error recording Armory purchase:", error);
+    }
+};
+
+window.recordArenaFee = async (cost) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+            radhBalance: increment(-cost)
+        });
+
+        // Re-load dashboard to sync UI and dispatch event
+        await loadDashboard(user);
+    } catch (error) {
+        console.error("Error recording Arena fee:", error);
     }
 };
 
