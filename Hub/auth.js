@@ -9,7 +9,9 @@ import {
 import {
     doc,
     setDoc,
-    getDoc
+    getDoc,
+    updateDoc,
+    increment
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 // DOM Elements
@@ -150,6 +152,7 @@ async function loadDashboard(user) {
             // Handle backwards compatibility for totalRadh if it exists, otherwise use radhBalance
             const currentRadh = data.radhBalance !== undefined ? data.radhBalance : (data.totalRadh !== undefined ? data.totalRadh : 0);
             const currentHam = data.hamBalance !== undefined ? data.hamBalance : 0;
+            const currentRank = data.rank !== undefined ? data.rank : 1000;
 
             if(radhBalanceDisplay) radhBalanceDisplay.textContent = currentRadh;
 
@@ -163,7 +166,7 @@ async function loadDashboard(user) {
             }
 
             // Dispatch custom event if wallet.js needs to know user loaded
-            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: data.walletAddress } }));
+            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: data.walletAddress, radhBalance: currentRadh, rank: currentRank } }));
         } else {
             // First time logic (Sign up or new Guest)
             const newUsername = pendingUsername || (user.isAnonymous ? "New OHF Agent!" : "Operative");
@@ -184,18 +187,55 @@ async function loadDashboard(user) {
                 username: newUsername,
                 hamBalance: 0,
                 radhBalance: 0,
+                rank: 1000,
                 inventory: [],
                 createdAt: new Date().toISOString()
             });
             pendingUsername = null; // Clear it out
 
-            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: null } }));
+            window.dispatchEvent(new CustomEvent('userLoaded', { detail: { uid: user.uid, walletAddress: null, radhBalance: 0, rank: 1000 } }));
         }
     } catch (error) {
         console.error("Error fetching user data:", error);
         if(radhBalanceDisplay) radhBalanceDisplay.textContent = "ERR";
     }
 }
+
+// Global Game State functions
+window.recordMatchResult = async (radhPayout, rankChange) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+            radhBalance: increment(radhPayout),
+            rank: increment(rankChange)
+        });
+
+        // Re-load dashboard to sync UI and dispatch event
+        await loadDashboard(user);
+    } catch (error) {
+        console.error("Error recording match result:", error);
+    }
+};
+
+window.recordArmoryPurchase = async (cost) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+            radhBalance: increment(-cost)
+        });
+
+        // Re-load dashboard to sync UI and dispatch event
+        await loadDashboard(user);
+    } catch (error) {
+        console.error("Error recording Armory purchase:", error);
+    }
+};
 
 // Auth State Observer
 onAuthStateChanged(auth, (user) => {
