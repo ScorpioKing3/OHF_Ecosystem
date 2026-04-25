@@ -184,6 +184,7 @@ async function loadDashboard(user) {
                 username: newUsername,
                 hamBalance: 0,
                 radhBalance: 0,
+                inventory: [],
                 createdAt: new Date().toISOString()
             });
             pendingUsername = null; // Clear it out
