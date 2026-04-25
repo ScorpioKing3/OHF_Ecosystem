@@ -16,11 +16,11 @@ window.addEventListener('userLoaded', (e) => {
     const existingWallet = e.detail.walletAddress;
 
     if (existingWallet) {
-        walletStatusDisplay.textContent = `Connected: ${existingWallet.substring(0, 6)}...${existingWallet.substring(existingWallet.length - 4)}`;
-        walletStatusDisplay.classList.add('text-green-400');
-        walletStatusDisplay.classList.remove('text-gray-400');
-        connectWalletBtn.textContent = 'UPDATE WALLET';
-        manualWalletInput.value = existingWallet;
+        if (walletStatusDisplay) walletStatusDisplay.textContent = `Connected: ${existingWallet.substring(0, 6)}...${existingWallet.substring(existingWallet.length - 4)}`;
+        if (walletStatusDisplay) walletStatusDisplay.classList.add('text-green-400');
+        if (walletStatusDisplay) walletStatusDisplay.classList.remove('text-gray-400');
+        if (connectWalletBtn) connectWalletBtn.textContent = 'UPDATE WALLET';
+        if (manualWalletInput) manualWalletInput.value = existingWallet;
     } else {
         resetWalletUI();
     }
@@ -33,11 +33,11 @@ window.addEventListener('userLoggedOut', () => {
 });
 
 function resetWalletUI() {
-    walletStatusDisplay.textContent = 'Not Connected';
-    walletStatusDisplay.classList.remove('text-green-400');
-    walletStatusDisplay.classList.add('text-gray-400');
-    connectWalletBtn.textContent = 'LINK WALLET';
-    manualWalletInput.value = '';
+    if (walletStatusDisplay) walletStatusDisplay.textContent = 'Not Connected';
+    if (walletStatusDisplay) walletStatusDisplay.classList.remove('text-green-400');
+    if (walletStatusDisplay) walletStatusDisplay.classList.add('text-gray-400');
+    if (connectWalletBtn) connectWalletBtn.textContent = 'LINK WALLET';
+    if (manualWalletInput) manualWalletInput.value = '';
 }
 
 async function linkWallet() {
@@ -46,7 +46,7 @@ async function linkWallet() {
         return;
     }
 
-    const address = manualWalletInput.value.trim();
+    const address = manualWalletInput ? manualWalletInput.value.trim() : "";
 
     // Validate Ethereum address (starts with 0x and is 42 characters long)
     if (!address.startsWith('0x') || address.length !== 42) {
@@ -56,10 +56,10 @@ async function linkWallet() {
 
     try {
         // Update UI immediately for responsiveness
-        walletStatusDisplay.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-        walletStatusDisplay.classList.add('text-green-400');
-        walletStatusDisplay.classList.remove('text-gray-400');
-        connectWalletBtn.textContent = 'UPDATE WALLET';
+        if (walletStatusDisplay) walletStatusDisplay.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        if (walletStatusDisplay) walletStatusDisplay.classList.add('text-green-400');
+        if (walletStatusDisplay) walletStatusDisplay.classList.remove('text-gray-400');
+        if (connectWalletBtn) connectWalletBtn.textContent = 'UPDATE WALLET';
 
         // Save to Firestore
         const userDocRef = doc(db, "users", currentUserUid);
@@ -75,4 +75,4 @@ async function linkWallet() {
     }
 }
 
-connectWalletBtn.addEventListener('click', linkWallet);
+if (connectWalletBtn) connectWalletBtn.addEventListener('click', linkWallet);
